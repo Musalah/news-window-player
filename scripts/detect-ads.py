@@ -1,7 +1,7 @@
 """Flag ad snaps in stories.json (adds "ad": 1) by reading their text with OCR.
 
-The accounts label ads themselves: trendnews24 writes "Ad" on a red bar, saudi.panther
-writes a small "إعلان" in the top corner. A snap counts as an ad only when that word
+The accounts label ads themselves: trendnews24 writes "Ad" on a red bar (sometimes a white
+badge), saudi.panther writes a small "إعلان" in the top corner. Only those spots are read. A snap counts as an ad only when that word
 stands alone on its line, so headlines like "إعلان حرب" stay. Results are cached by snap
 id in ads-cache.json so each snap is only scanned once.
 Needs: tesseract (eng + ara), ffmpeg/ffprobe, Pillow.
@@ -105,8 +105,7 @@ def ad_label(path, tmp):
         top = top.resize((top.width * 2, top.height * 2)).point(lambda v: 0 if v < 230 else 255)
         if hit := label(ocr(top, tmp, "ara")):
             return f"corner: {hit}"
-    if hit := label(ocr(im, tmp, "eng+ara")):
-        return f"full frame: {hit}"
+    # no whole-frame pass: it found nothing the passes above miss, and misread "AD" in a news video
     return None
 
 
