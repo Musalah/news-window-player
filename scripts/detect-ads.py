@@ -127,7 +127,8 @@ def scan(snap):
 
 def main():
     data = json.load(open(STORIES))
-    cache = json.load(open(CACHE)) if os.path.exists(CACHE) else {}
+    rescan = "--rescan" in sys.argv  # after changing the rules: ignore cached results
+    cache = json.load(open(CACHE)) if os.path.exists(CACHE) and not rescan else {}
     snaps = [s for a in data["accounts"] for s in a["snaps"]]
     todo = [s for s in snaps if s["id"] not in cache and not s.get("ad")]
     with ThreadPoolExecutor(os.cpu_count() or 4) as ex:

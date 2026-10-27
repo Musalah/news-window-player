@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "*/10 * * * *"
   workflow_dispatch:
+    inputs:
+      rescan:
+        description: Re-check every snap for ads, ignoring the cache
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -32,7 +37,7 @@ jobs:
       - name: Flag ads
         if: steps.ocr.outcome == 'success'
         continue-on-error: true
-        run: python3 scripts/detect-ads.py
+        run: python3 scripts/detect-ads.py ${{ inputs.rescan && '--rescan' || '' }}
       - name: Commit if changed
         run: |
           [ -z "$(git status --porcelain -- stories.json ads-cache.json)" ] && exit 0
