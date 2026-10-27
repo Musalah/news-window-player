@@ -24,6 +24,7 @@ async function fetchAccount(username) {
       ts: Number(s.timestampInSec?.value ?? s.timestampInSec) || 0,
       id: s.snapId?.value ?? s.snapUrls?.mediaUrl,
       m: s.snapUrls?.mediaUrl,
+      ...(s.isSponsored ? { ad: 1 } : {}), // always null so far; OCR in detect-ads.py does the real work
     }))
     .filter(s => s.m)
     .reverse(); // snapList is oldest-first; the player wants newest first
