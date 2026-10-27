@@ -6,7 +6,7 @@ stands alone on its line, so headlines like "إعلان حرب" stay. Results ar
 id in ads-cache.json so each snap is only scanned once.
 Needs: tesseract (eng + ara), ffmpeg/ffprobe, Pillow.
 """
-import json, os, re, subprocess, sys, tempfile
+import json, os, re, subprocess, sys, tempfile, time
 from concurrent.futures import ThreadPoolExecutor
 from PIL import Image
 
@@ -15,6 +15,8 @@ STORIES = os.path.join(ROOT, "stories.json")
 CACHE = os.path.join(ROOT, "ads-cache.json")
 LABEL = re.compile(r"^\W*(Ad|AD|إعلان|اعلان)\W*$")
 VIDEO_POINTS = (0.1, 0.35, 0.6, 0.85)
+DEADLINE = time.time() + 6 * 60  # leave the rest for the next 10-minute run
+os.environ["OMP_THREAD_LIMIT"] = "1"  # we run tesseracts in parallel; its own threads only fight each other
 
 
 def run(cmd, timeout=90):
@@ -113,7 +115,9 @@ def frames(snap, tmp):
 
 
 def scan(snap):
-    """1 = ad, 0 = not an ad, None = couldn't fetch (retry next run)."""
+    """1 = ad, 0 = not an ad, None = couldn't fetch or out of time (retry next run)."""
+    if time.time() > DEADLINE:
+        return None
     with tempfile.TemporaryDirectory() as tmp:
         try:
             paths = frames(snap, tmp)
@@ -140,7 +144,8 @@ def main():
             s["ad"] = 1
     cache = {s["id"]: cache[s["id"]] for s in snaps if s["id"] in cache}  # drop expired snaps
     for a in data["accounts"]:
-        print(f"{a['u']}: {sum(1 for s in a['snaps'] if s.get('ad'))} ads / {len(a['snaps'])} (scanned {len(todo)} new)")
+        print(f"{a['u']}: {sum(1 for s in a['snaps'] if s.get('ad'))} ads / {len(a['snaps'])}")
+    print(f"scanned {sum(1 for s in todo if s['id'] in cache)} of {len(todo)} new snaps in {time.time() - DEADLINE + 360:.0f}s")
     json.dump(data, open(STORIES, "w"), ensure_ascii=False, separators=(",", ":"))
     json.dump(cache, open(CACHE, "w"), separators=(",", ":"))
 
