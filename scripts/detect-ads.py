@@ -1,9 +1,11 @@
 """Flag ad snaps in stories.json (adds "ad": 1) by reading their text with OCR.
 
-The accounts label ads themselves: trendnews24 writes "Ad" on a red bar (sometimes a white
-badge), saudi.panther writes a small "إعلان" in the top corner. Only those spots are read. A snap counts as an ad only when that word
-stands alone on its line, so headlines like "إعلان حرب" stay. Results are cached by snap
-id in ads-cache.json so each snap is only scanned once.
+Labelled ads: trendnews24 writes "Ad" on a red bar (sometimes a white badge), saudi.panther
+writes a small "إعلان" in the top corner. The word must stand alone on its line, so headlines
+like "إعلان حرب" stay.
+Unlabelled promos: a Snapchat link sticker (a store's domain on the sticker's flat grey), or a
+discount code ("كود TN26", "كود خصم"). Domains typed into the snap itself don't count.
+Results are cached by snap id in ads-cache.json so each snap is only scanned once.
 Needs: tesseract (eng + ara), ffmpeg/ffprobe, Pillow.
 """
 import json, os, re, subprocess, sys, tempfile, time
@@ -14,6 +16,11 @@ ROOT = os.path.join(os.path.dirname(__file__), "..")
 STORIES = os.path.join(ROOT, "stories.json")
 CACHE = os.path.join(ROOT, "ads-cache.json")
 LABEL = re.compile(r"^\W*(Ad|AD|إعلان|اعلان)\W*$")
+DOMAIN = re.compile(r"[a-z0-9-]{3,}\.(?:sa|com|net|org|online|store|shop|co)\b", re.I)
+NOT_PROMO = re.compile(r"gov|trendnews|saudipanther|snapchat", re.I)  # a sticker to these is just a source
+CODE_WORD = re.compile(r"(?:^|\s)[وفب]?كود(?!\w)")
+CODE = re.compile(r"(?<![A-Za-z0-9])(?=[A-Z0-9]*[A-Z])[A-Z0-9]{2,8}(?![A-Za-z0-9])")
+STICKER_GREY = 152  # Snapchat link stickers are flat rgb(152,152,152)
 VIDEO_POINTS = (0.1, 0.35, 0.6, 0.85)
 DEADLINE = time.time() + 6 * 60  # leave the rest for the next 10-minute run
 os.environ["OMP_THREAD_LIMIT"] = "1"  # we run tesseracts in parallel; its own threads only fight each other
@@ -105,7 +112,41 @@ def ad_label(path, tmp):
         top = top.resize((top.width * 2, top.height * 2)).point(lambda v: 0 if v < 230 else 255)
         if hit := label(ocr(top, tmp, "ara")):
             return f"corner: {hit}"
-    # no whole-frame pass: it found nothing the passes above miss, and misread "AD" in a news video
+    # whole frame: only promo cues; a bare "Ad" here was misread in a news video
+    return promo(im, tmp)
+
+
+def ocr_lines(img, tmp):
+    """Text lines from tesseract, each as [(word, (left, top, width, height)), ...]."""
+    p = os.path.join(tmp, "ocr-words.png")
+    img.save(p)
+    lines = {}
+    for row in run(["tesseract", p, "-", "-l", "eng+ara", "--psm", "11", "tsv"]).splitlines()[1:]:
+        c = row.split("\t")
+        if len(c) == 12 and c[11].strip():
+            lines.setdefault(tuple(c[2:5]), []).append((c[11], tuple(map(int, c[6:10]))))
+    return list(lines.values())
+
+
+def on_sticker(im, box):
+    """True when the ring just around box is the flat grey of a link sticker."""
+    l, t, w, h = box
+    ring = [im.getpixel((x, y)) for x in range(max(0, l - 6), min(im.width, l + w + 6), 3)
+            for y in (max(0, t - 5), min(im.height - 1, t + h + 4))]
+    grey = sum(1 for r, g, b in ring if max(abs(r - STICKER_GREY), abs(g - STICKER_GREY), abs(b - STICKER_GREY)) <= 8)
+    return grey >= len(ring) * 0.7
+
+
+def promo(im, tmp):
+    """Why this unlabelled frame looks like a promo, or None."""
+    big = im if im.width >= 800 else im.resize((im.width * 2, im.height * 2))  # small video frames
+    for line in ocr_lines(big, tmp):
+        text = " ".join(w for w, _ in line)
+        for w, box in line:
+            if DOMAIN.search(w) and not NOT_PROMO.search(w) and on_sticker(big, box):
+                return f"link sticker: {w}"
+        if CODE_WORD.search(text) and (CODE.search(text) or re.search(r"كود\s+(?:ال)?خص", text)):  # "كود (ال)خصم", OCR often mangles the ending
+            return f"discount code: {text}"
     return None
 
 
