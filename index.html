@@ -133,14 +133,15 @@ const IMG_MS = 5500;
 const ICON_ON = '<svg viewBox="0 0 24 24" fill="#fff"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 8.5a5 5 0 010 7M18.5 6a8.5 8.5 0 010 12" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>';
 const ICON_OFF = '<svg viewBox="0 0 24 24" fill="#fff"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 9.5l5 5m0-5l-5 5" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>';
 
-/* ---------- data: the Worker returns {accounts:[{u,t,p,snaps:[{v,ts,id,m}]}]}, snaps newest first ---------- */
-const API = "WORKER_URL";
+/* ---------- data: stories.json, refreshed every ~10 min by the GitHub Actions job ----------
+   {accounts:[{u,t,p,snaps:[{v,ts,id,m}]}], fetchedAt}, snaps newest first */
+const API = "stories.json";
 let ACCTS = [], loadState = "loading", loadedAt = 0;
 
 async function loadStories() {
   loadState = "loading"; renderHome();
   try {
-    const res = await fetch(API, { cache: "no-store" });
+    const res = await fetch(`${API}?t=${Date.now()}`, { cache: "no-store" }); // bypass the Pages CDN cache
     const data = await res.json();
     ACCTS = (data.accounts || []).filter(a => a.snaps && a.snaps.length);
     loadState = "ok"; loadedAt = Date.now();

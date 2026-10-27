@@ -1,5 +1,5 @@
 // App-shell cache so the home-screen app opens instantly; stories and media always come from the network.
-const CACHE = "news-window-v1";
+const CACHE = "news-window-v2";
 const SHELL = ["./", "index.html", "manifest.webmanifest", "icons/icon-192.png", "icons/apple-touch-icon.png"];
 
 self.addEventListener("install", e => {
@@ -10,7 +10,7 @@ self.addEventListener("activate", e => {
 });
 self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
-  if (e.request.method !== "GET" || url.origin !== location.origin) return;
+  if (e.request.method !== "GET" || url.origin !== location.origin || url.pathname.endsWith("stories.json")) return;
   // stale-while-revalidate for the shell
   e.respondWith(caches.open(CACHE).then(async c => {
     const hit = await c.match(e.request);
