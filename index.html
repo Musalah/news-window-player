@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>نافذة الأخبار</title>
+<style>
+:root{
+  --bg:#07070a; --card:#14141a; --line:#24242c; --text:#f4f4f6; --dim:#9a9aa6;
+  --ring:conic-gradient(from 200deg,#ffd600,#ff7a00,#ff0069,#d300c5,#7638fa,#ffd600);
+  --seen:#3a3a44;
+  --safe-t:env(safe-area-inset-top,0px); --safe-b:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;
+  font-family:-apple-system,"SF Arabic","Geeza Pro",system-ui,sans-serif;-webkit-user-select:none;user-select:none;
+  overscroll-behavior:none;touch-action:manipulation}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+
+/* ---------- home ---------- */
+#home{position:fixed;inset:0;padding:calc(var(--safe-t) + 28px) 20px calc(var(--safe-b) + 24px);
+  display:flex;flex-direction:column;gap:22px;transition:transform .45s cubic-bezier(.2,.8,.2,1),opacity .35s,filter .45s}
+body.viewing #home{transform:scale(.92);opacity:0;filter:blur(6px);pointer-events:none}
+.brand{display:flex;align-items:baseline;justify-content:space-between}
+.brand h1{font-size:30px;font-weight:800;letter-spacing:-.5px}
+.brand time{color:var(--dim);font-size:14px}
+.accts{display:flex;flex-direction:column;gap:12px}
+.acct{display:flex;align-items:center;gap:14px;padding:14px;border-radius:22px;background:var(--card);
+  border:1px solid var(--line);text-align:start;transition:transform .15s;animation:rise .5s both}
+.acct:nth-child(2){animation-delay:.07s}
+.acct:active{transform:scale(.97)}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}}
+.ring{flex:none;width:68px;height:68px;border-radius:50%;padding:3px;background:var(--ring);position:relative}
+.ring.seen{background:var(--seen)}
+.ring img{width:100%;height:100%;border-radius:50%;border:3px solid var(--card);object-fit:cover;background:#222;display:block}
+.ring .n{position:absolute;bottom:-3px;inset-inline-start:-3px;min-width:22px;height:22px;padding:0 6px;border-radius:11px;
+  background:#ff0069;color:#fff;font-size:12px;font-weight:700;display:grid;place-items:center;border:2px solid var(--card)}
+.ring.seen .n{display:none}
+.meta{min-width:0;flex:1}
+.meta b{display:block;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta span{display:block;color:var(--dim);font-size:13px;margin-top:3px}
+.play{margin-top:auto;height:58px;border-radius:29px;background:var(--text);color:#000;font-size:18px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;gap:10px;transition:transform .15s}
+.play:active{transform:scale(.97)}
+.play svg{width:18px;height:18px}
+.empty{margin:auto;text-align:center;color:var(--dim);line-height:1.8}
+.empty b{display:block;color:var(--text);font-size:20px;margin-bottom:6px}
+
+/* ---------- viewer ---------- */
+#viewer{position:fixed;inset:0;background:#000;perspective:1100px;visibility:hidden;opacity:0;
+  transition:opacity .3s,visibility 0s .3s}
+body.viewing #viewer{visibility:visible;opacity:1;transition:opacity .3s}
+#cube{position:absolute;inset:0;transform-style:preserve-3d;will-change:transform}
+.face{position:absolute;inset:0;overflow:hidden;background:#000;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.face.back{visibility:hidden}
+.face .bg{position:absolute;inset:-40px;background:center/cover no-repeat;filter:blur(30px) brightness(.55);transform:scale(1.1)}
+/* contain, not cover: news snaps put text right up to the edges */
+.face .m{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none}
+.face.img img.m,.face.vid video.m{display:block}
+.face .shade{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none}
+.spin{position:absolute;top:50%;left:50%;width:34px;height:34px;margin:-17px;border-radius:50%;
+  border:3px solid #fff3;border-top-color:#fff;animation:sp .8s linear infinite;opacity:0;transition:opacity .2s .25s}
+.face.loading .spin{opacity:1}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+#ui{position:absolute;inset:0;pointer-events:none;transition:opacity .2s}
+body.hold #ui{opacity:0}
+#ui .top{position:absolute;top:0;left:0;right:0;padding:calc(var(--safe-t) + 10px) 10px 40px;
+  background:linear-gradient(#0009,#0000)}
+.bars{display:flex;gap:4px;direction:ltr}
+.bar{flex:1;height:2.5px;border-radius:2px;background:#ffffff4d;overflow:hidden}
+.bar i{display:block;height:100%;width:100%;background:#fff;transform-origin:left;transform:scaleX(0)}
+.bar.done i{transform:scaleX(1)}
+.head{display:flex;align-items:center;gap:10px;margin-top:12px;pointer-events:auto}
+.head img{width:34px;height:34px;border-radius:50%;object-fit:cover;background:#333}
+.head .who{flex:1;min-width:0;line-height:1.25;text-shadow:0 1px 3px #0008}
+.head .who b{font-size:15px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.head .who span{font-size:12px;opacity:.8}
+.icon{width:40px;height:40px;display:grid;place-items:center;border-radius:50%}
+.icon svg{width:24px;height:24px;filter:drop-shadow(0 1px 2px #0008)}
+#pill{position:absolute;left:50%;bottom:calc(var(--safe-b) + 30px);transform:translateX(-50%) translateY(20px);
+  padding:10px 18px;border-radius:22px;background:#000a;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  font-size:14px;font-weight:600;opacity:0;transition:.3s;pointer-events:none;white-space:nowrap}
+#pill.on{opacity:1;transform:translateX(-50%);pointer-events:auto}
+#toast{position:fixed;left:50%;bottom:calc(var(--safe-b) + 110px);transform:translateX(-50%) scale(.9);padding:12px 20px;
+  border-radius:20px;background:#fff;color:#000;font-weight:700;opacity:0;transition:.35s;pointer-events:none;z-index:9}
+#toast.on{opacity:1;transform:translateX(-50%) scale(1)}
+</style>
+</head>
+<body>
+
+<main id="home"></main>
+
+<section id="viewer" aria-label="القصص">
+  <div id="cube">
+    <div class="face"><div class="bg"></div><img class="m" alt=""><video class="m" playsinline webkit-playsinline preload="auto"></video><div class="spin"></div><div class="shade"></div></div>
+    <div class="face back"><div class="bg"></div><img class="m" alt=""><video class="m" playsinline webkit-playsinline preload="auto"></video><div class="spin"></div><div class="shade"></div></div>
+  </div>
+  <div id="ui">
+    <div class="top">
+      <div class="bars" id="bars"></div>
+      <div class="head">
+        <img id="hAv" alt="">
+        <div class="who"><b id="hName"></b><span id="hTime"></span></div>
+        <button class="icon" id="mute" aria-label="الصوت"></button>
+        <button class="icon" id="close" aria-label="إغلاق"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+    </div>
+    <button id="pill">🔇 اضغط لتشغيل الصوت</button>
+  </div>
+</section>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const IMG_MS = 5500;
+const ICON_ON = '<svg viewBox="0 0 24 24" fill="#fff"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 8.5a5 5 0 010 7M18.5 6a8.5 8.5 0 010 12" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>';
+const ICON_OFF = '<svg viewBox="0 0 24 24" fill="#fff"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 9.5l5 5m0-5l-5 5" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>';
+
+/* ---------- data: the shortcut passes lines in the URL hash ----------
+   @username|title|avatarUrl   account header
+   type|timestampSec|mediaUrl  snap (type 1 = video), newest first;
+                               mediaUrl may omit the CDN prefix to keep the URL short */
+const CDN = "https://cf-st.sc-cdn.net/";
+function parse(raw) {
+  const accts = [];
+  for (const line of raw.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    if (line[0] === "@") {
+      const [u, t, p] = line.slice(1).split("|");
+      accts.push({ u: u.trim(), t: (t || u).trim(), p: (p || "").trim(), snaps: [] });
+    } else if (accts.length) {
+      const [v, ts, ...rest] = line.split("|");
+      let m = rest.join("|").trim();
+      if (!m) continue;
+      if (!/^https?:/.test(m)) m = CDN + m.replace(/^\//, "");
+      const id = (m.match(/\/[a-z]\/([^./?]+)/) || [, m])[1];
+      accts[accts.length - 1].snaps.push({ v: v.trim() === "1", ts: +ts || 0, id, m });
+    }
+  }
+  return accts.filter(a => a.u && a.snaps.length);
+}
+let raw = "";
+try { raw = decodeURIComponent(location.hash.slice(1)); } catch { raw = location.hash.slice(1); }
+const ACCTS = parse(raw);
+
+/* ---------- seen state (per viewer, best effort) ---------- */
+let seen = new Set();
+try { seen = new Set(JSON.parse(localStorage.getItem("seen") || "[]")); } catch {}
+function markSeen(id) {
+  if (seen.has(id)) return;
+  seen.add(id);
+  try { localStorage.setItem("seen", JSON.stringify([...seen].slice(-600))); } catch {}
+}
+let muted = false;
+try { muted = localStorage.getItem("muted") === "1"; } catch {}
+
+const rtf = new Intl.RelativeTimeFormat("ar", { numeric: "auto" });
+function ago(ts) {
+  if (!ts) return "";
+  const s = Math.max(0, Date.now() / 1000 - ts);
+  if (s < 60) return "الآن";
+  if (s < 3600) return rtf.format(-Math.round(s / 60), "minute");
+  if (s < 86400) return rtf.format(-Math.round(s / 3600), "hour");
+  return rtf.format(-Math.round(s / 86400), "day");
+}
+const nf = new Intl.NumberFormat("ar");
+
+/* ---------- home ---------- */
+function renderHome() {
+  const home = $("#home");
+  const today = new Date().toLocaleDateString("ar", { weekday: "long", day: "numeric", month: "long" });
+  if (!ACCTS.length) {
+    home.innerHTML = `<div class="brand"><h1>نافذة الأخبار</h1><time>${today}</time></div>
+      <div class="empty"><b>لا توجد قصص الآن</b>افتح الصفحة من اختصار «نافذة الأخبار»<br>عشان يجيب آخر القصص.</div>`;
+    return;
+  }
+  const unseen = a => a.snaps.filter(s => !seen.has(s.id)).length;
+  home.innerHTML = `<div class="brand"><h1>نافذة الأخبار</h1><time>${today}</time></div>
+    <div class="accts">${ACCTS.map((a, i) => {
+      const n = unseen(a);
+      return `<button class="acct" data-i="${i}">
+        <div class="ring ${n ? "" : "seen"}"><img src="${esc(a.p)}" alt="" onerror="this.style.visibility='hidden'"><span class="n">${nf.format(n)}</span></div>
+        <div class="meta"><b>${esc(a.t)}</b><span>${nf.format(a.snaps.length)} قصص · آخرها ${ago(a.snaps[0].ts)}</span></div>
+      </button>`;
+    }).join("")}</div>
+    <button class="play" id="playAll"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>شغّل الكل</button>`;
+  home.querySelectorAll(".acct").forEach(b => b.onclick = () => open(+b.dataset.i));
+  $("#playAll").onclick = () => {
+    const i = ACCTS.findIndex(a => unseen(a));
+    open(i < 0 ? 0 : i);
+  };
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]); }
+
+/* ---------- viewer ---------- */
+const faces = [...document.querySelectorAll(".face")];
+let front = faces[0], back = faces[1];
+let ai = 0, si = 0, elapsed = 0, last = 0, paused = false, busy = false, raf = 0;
+
+function firstUnseen(a) { const i = ACCTS[a].snaps.findIndex(s => !seen.has(s.id)); return i < 0 ? 0 : i; }
+
+function load(face, a, s) {
+  const snap = ACCTS[a].snaps[s];
+  if (face.key === snap.id) return;
+  face.key = snap.id; face.ready = false; face.failed = false;
+  const img = face.querySelector("img"), vid = face.querySelector("video"), bg = face.querySelector(".bg");
+  face.classList.add("loading");
+  face.classList.toggle("vid", snap.v); face.classList.toggle("img", !snap.v);
+  const done = ok => { if (face.key !== snap.id) return; face.ready = ok; face.failed = !ok; face.classList.remove("loading"); };
+  if (snap.v) {
+    img.removeAttribute("src"); bg.style.backgroundImage = "none";
+    vid.muted = muted; vid.src = snap.m; vid.load();
+    vid.oncanplay = () => done(true); vid.onerror = () => done(false);
+  } else {
+    vid.pause(); vid.removeAttribute("src"); vid.load();
+    bg.style.backgroundImage = `url("${snap.m}")`;
+    img.onload = () => done(true); img.onerror = () => done(false);
+    img.src = snap.m;
+    if (img.complete && img.naturalWidth) done(true);
+  }
+}
+
+function nextPos(a, s) {
+  if (s + 1 < ACCTS[a].snaps.length) return [a, s + 1];
+  if (a + 1 < ACCTS.length) return [a + 1, firstUnseen(a + 1)];
+  return null;
+}
+
+function buildBars() {
+  $("#bars").innerHTML = ACCTS[ai].snaps.map(() => '<div class="bar"><i></i></div>').join("");
+}
+function paintBars(p) {
+  const bars = $("#bars").children;
+  for (let i = 0; i < bars.length; i++) {
+    bars[i].classList.toggle("done", i < si);
+    bars[i].firstChild.style.transform = i === si ? `scaleX(${Math.min(1, p)})` : "";
+  }
+}
+function paintHead() {
+  const a = ACCTS[ai], snap = a.snaps[si];
+  $("#hAv").src = a.p; $("#hName").textContent = a.t; $("#hTime").textContent = ago(snap.ts);
+}
+
+function playFront() {
+  const v = front.querySelector("video");
+  if (!ACCTS[ai].snaps[si].v) return;
+  v.muted = muted;
+  const p = v.play();
+  if (p) p.catch(err => {
+    if (err.name === "NotAllowedError" && !v.muted) { v.muted = true; $("#pill").classList.add("on"); v.play().catch(() => {}); }
+  });
+}
+
+/* show snap (a,s). mode: "cut" | "next" | "prev" (cube turn between accounts) */
+function show(a, s, mode = "cut") {
+  const accountChange = a !== ai;
+  front.querySelector("video").pause();
+  load(back, a, s);
+  [front, back] = [back, front];
+  ai = a; si = s; elapsed = 0;
+  if (accountChange || !$("#bars").children.length) buildBars();
+  paintHead(); paintBars(0);
+  front.classList.remove("back"); back.classList.add("back");
+  front.style.transform = back.style.transform = "";
+  if (mode !== "cut") cubeTurn(mode === "next" ? 1 : -1);
+  const v = front.querySelector("video");
+  if (ACCTS[a].snaps[s].v) { try { v.currentTime = 0; } catch {} }
+  playFront();
+  markSeen(ACCTS[a].snaps[s].id);
+  if (!busy) setTimeout(preload, 120);
+}
+// load the following snap into the hidden face (skipped mid-cube; cubeTurn calls it when done)
+function preload() {
+  const n = nextPos(ai, si);
+  if (n && !busy && back.classList.contains("back")) load(back, n[0], n[1]);
+}
+
+function cubeTurn(dir) {
+  // the old face (now `back`) and new face (`front`) share an edge that sweeps across the screen
+  const oldF = back, newF = front;
+  oldF.classList.remove("back");
+  busy = true;
+  const ease = "cubic-bezier(.35,.1,.2,1)", dur = 520;
+  oldF.style.transformOrigin = dir > 0 ? "right center" : "left center";
+  newF.style.transformOrigin = dir > 0 ? "left center" : "right center";
+  const anims = [
+    oldF.animate([{ transform: "none" }, { transform: `translateX(${-100 * dir}%) rotateY(${-90 * dir}deg)` }], { duration: dur, easing: ease, fill: "forwards" }),
+    newF.animate([{ transform: `translateX(${100 * dir}%) rotateY(${90 * dir}deg)` }, { transform: "none" }], { duration: dur, easing: ease, fill: "forwards" }),
+    oldF.querySelector(".shade").animate([{ opacity: 0 }, { opacity: .6 }], { duration: dur, easing: ease }),
+    newF.querySelector(".shade").animate([{ opacity: .6 }, { opacity: 0 }], { duration: dur, easing: ease }),
+  ];
+  Promise.all(anims.slice(0, 2).map(x => x.finished)).catch(() => {}).then(() => {
+    anims.forEach(x => x.cancel());
+    if (oldF === back) oldF.classList.add("back");
+    busy = false;
+    preload();
+  });
+}
+
+function next() {
+  const n = nextPos(ai, si);
+  if (!n) return finish();
+  show(n[0], n[1], n[0] !== ai ? "next" : "cut");
+}
+function prev() {
+  if (si > 0) return show(ai, si - 1);
+  if (ai > 0) return show(ai - 1, 0, "prev");
+  show(ai, 0); // restart first snap
+}
+function jumpAccount(dir) {
+  const a = ai + dir;
+  if (a < 0) return show(ai, 0);
+  if (a >= ACCTS.length) return finish();
+  show(a, firstUnseen(a), dir > 0 ? "next" : "prev");
+}
+
+function loop(now) {
+  raf = requestAnimationFrame(loop);
+  const dt = last ? now - last : 0; last = now;
+  if (!document.body.classList.contains("viewing")) return;
+  if (front.failed) { elapsed += dt; if (elapsed > 900) next(); return; }
+  if (paused || busy || !front.ready) return;
+  const snap = ACCTS[ai].snaps[si];
+  let p;
+  if (snap.v) {
+    const v = front.querySelector("video");
+    p = v.duration ? v.currentTime / v.duration : 0;
+    if (v.ended) return next();
+  } else {
+    elapsed += dt; p = elapsed / IMG_MS;
+    if (p >= 1) return next();
+  }
+  paintBars(p);
+}
+
+function open(a) {
+  document.body.classList.add("viewing");
+  front.key = back.key = null;
+  ai = -1;
+  // called inside the tap, so the first video is allowed to play with sound
+  load(back, a, firstUnseen(a));
+  show(a, firstUnseen(a));
+  // unlock the second video element for sound too
+  const bv = back.querySelector("video");
+  bv.muted = muted;
+  const p = bv.play(); if (p) p.then(() => bv.pause()).catch(() => {});
+  last = 0;
+}
+function close() {
+  faces.forEach(f => f.querySelector("video").pause());
+  document.body.classList.remove("viewing", "hold");
+  $("#pill").classList.remove("on");
+  renderHome();
+}
+function finish() {
+  close();
+  toast("خلصت القصص ✨");
+}
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.classList.add("on");
+  setTimeout(() => t.classList.remove("on"), 1800);
+}
+
+function setMuted(m) {
+  muted = m;
+  try { localStorage.setItem("muted", m ? "1" : "0"); } catch {}
+  $("#mute").innerHTML = m ? ICON_OFF : ICON_ON;
+  faces.forEach(f => f.querySelector("video").muted = m);
+  if (!m) { $("#pill").classList.remove("on"); playFront(); }
+}
+$("#mute").onclick = e => { e.stopPropagation(); setMuted(!muted); };
+$("#pill").onclick = e => { e.stopPropagation(); setMuted(false); };
+$("#close").onclick = e => { e.stopPropagation(); close(); };
+$("#mute").innerHTML = muted ? ICON_OFF : ICON_ON;
+
+/* ---------- gestures: tap, hold, swipe ---------- */
+const viewer = $("#viewer"), cube = $("#cube");
+let g = null, holdT = 0;
+viewer.addEventListener("pointerdown", e => {
+  if (e.target.closest("button")) return;
+  g = { x: e.clientX, y: e.clientY, t: performance.now(), drag: false };
+  holdT = setTimeout(() => { paused = true; document.body.classList.add("hold"); front.querySelector("video").pause(); }, 200);
+});
+viewer.addEventListener("pointermove", e => {
+  if (!g) return;
+  const dx = e.clientX - g.x, dy = e.clientY - g.y;
+  if (!g.drag && Math.hypot(dx, dy) > 10) { g.drag = true; clearTimeout(holdT); }
+  if (g.drag && dy > 0 && Math.abs(dy) > Math.abs(dx)) {
+    const k = Math.min(dy / innerHeight, 1);
+    cube.style.transform = `translateY(${dy}px) scale(${1 - k * .25})`;
+    cube.style.borderRadius = "24px";
+    viewer.style.background = `rgba(0,0,0,${1 - k})`;
+  }
+});
+const endGesture = e => {
+  if (!g) return;
+  clearTimeout(holdT);
+  const dx = e.clientX - g.x, dy = e.clientY - g.y, held = performance.now() - g.t > 200;
+  const wasPaused = paused;
+  paused = false; document.body.classList.remove("hold");
+  const resetDrag = () => { cube.style.transition = "transform .25s"; cube.style.transform = ""; viewer.style.background = "";
+    setTimeout(() => { cube.style.transition = ""; cube.style.borderRadius = ""; }, 260); };
+  if (g.drag && dy > 110 && dy > Math.abs(dx)) { resetDrag(); close(); }
+  else if (g.drag && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) { resetDrag(); jumpAccount(dx < 0 ? 1 : -1); }
+  else if (!g.drag && !held) { e.clientX < innerWidth * 0.3 ? prev() : next(); }
+  else { resetDrag(); if (wasPaused) playFront(); }
+  g = null;
+};
+viewer.addEventListener("pointerup", endGesture);
+viewer.addEventListener("pointercancel", endGesture);
+viewer.addEventListener("contextmenu", e => e.preventDefault());
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { paused = true; front.querySelector("video").pause(); }
+  else { paused = false; if (document.body.classList.contains("viewing")) playFront(); }
+});
+addEventListener("keydown", e => {
+  if (!document.body.classList.contains("viewing")) return;
+  if (e.key === "ArrowRight") next(); else if (e.key === "ArrowLeft") prev(); else if (e.key === "Escape") close();
+});
+
+renderHome();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
