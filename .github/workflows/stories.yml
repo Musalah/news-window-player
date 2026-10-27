@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       rescan:
-        description: Re-check every snap for ads, ignoring the cache
+        description: Re-read every snap (text and ads), ignoring the cache
         type: boolean
         default: false
 
@@ -19,32 +19,28 @@ concurrency:
 
 jobs:
   fetch:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest # Apple Vision reads the snaps' Arabic far better than tesseract
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: node scripts/fetch-stories.mjs
-      # Ad detection is best-effort: if it fails, stories still update, just without ad flags.
-      - name: Install OCR tools
-        id: ocr
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Best-effort: if reading fails, stories still update, just without new text or ad flags.
+      - name: Read snaps (text and ads)
         continue-on-error: true
-        timeout-minutes: 4
+        timeout-minutes: 9
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq -o DPkg::Lock::Timeout=60 --no-install-recommends tesseract-ocr tesseract-ocr-ara ffmpeg >/dev/null
           pip install -q pillow
-      - name: Flag ads
-        if: steps.ocr.outcome == 'success'
-        continue-on-error: true
-        timeout-minutes: 8
-        run: python3 scripts/detect-ads.py ${{ inputs.rescan && '--rescan' || '' }}
+          python3 scripts/scan-snaps.py ${{ inputs.rescan && '--rescan' || '' }}
       - name: Commit if changed
         run: |
-          [ -z "$(git status --porcelain -- stories.json ads-cache.json)" ] && exit 0
+          [ -z "$(git status --porcelain -- stories.json ocr.json)" ] && exit 0
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add stories.json ads-cache.json
+          git add stories.json ocr.json
           git commit -m "Update stories"
           git push
