@@ -29,13 +29,14 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 #home{position:fixed;inset:0;padding:calc(var(--safe-t) + 28px) 20px calc(var(--safe-b) + 24px);
   display:flex;flex-direction:column;gap:22px;transition:transform .45s cubic-bezier(.2,.8,.2,1),opacity .35s,filter .45s}
 body.viewing #home{transform:scale(.92);opacity:0;filter:blur(6px);pointer-events:none}
-.brand{display:flex;align-items:baseline;justify-content:space-between}
-.brand h1{font-size:30px;font-weight:800;letter-spacing:-.5px}
-.refresh{display:flex;align-items:center;gap:6px;color:var(--dim);font-size:14px;padding:6px 0}
+.brand{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.brand h1{font-size:30px;font-weight:800;letter-spacing:-.5px;white-space:nowrap}
+.brand time{display:block;color:var(--dim);font-size:13px;margin-top:2px}
+.refresh{display:grid;place-items:center;color:var(--dim);width:34px;height:34px;border-radius:50%;border:1px solid var(--line)}
 .refresh svg{width:16px;height:16px}
 .refresh.spinning svg{animation:sp .8s linear infinite}
 .tools{display:flex;align-items:center;gap:12px}
-.adtoggle{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--dim);padding:5px 10px;border-radius:99px;
+.adtoggle{display:flex;align-items:center;gap:5px;font-size:13px;white-space:nowrap;height:34px;color:var(--dim);padding:5px 10px;border-radius:99px;
   border:1px solid var(--line);transition:background .25s,color .25s,border-color .25s}
 .adtoggle svg{width:15px;height:15px}
 .adtoggle .slash{opacity:0;transition:opacity .25s}
@@ -197,14 +198,14 @@ function renderHome() {
   const home = $("#home");
   const today = new Date().toLocaleDateString("ar", { weekday: "long", day: "numeric", month: "long" });
   const ads = RAW.reduce((n, a) => n + a.snaps.filter(s => s.ad).length, 0);
-  const brand = `<div class="brand"><h1>نافذة الأخبار</h1><div class="tools">
+  const brand = `<div class="brand"><div><h1>نافذة الأخبار</h1><time>${today}</time></div><div class="tools">
     <button class="adtoggle ${hideAds ? "on" : ""}" id="adtoggle" aria-pressed="${hideAds}"
       aria-label="${hideAds ? "الإعلانات مخفية، اضغط لإظهارها" : "اضغط لإخفاء الإعلانات"}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10v4a1 1 0 0 0 1 1h2l5 4V5L6 9H4a1 1 0 0 0-1 1z"/><path d="M15 9.5a3.5 3.5 0 0 1 0 5"/><path class="slash" d="M3 3l18 18"/></svg>
       ${hideAds ? `بلا إعلانات${ads ? ` · ${nf.format(ads)}` : ""}` : "الإعلانات"}</button>
     <button class="refresh ${loadState === "loading" ? "spinning" : ""}" id="refresh" aria-label="تحديث">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v4h-4"/></svg>
-      <time>${today}</time></button></div></div>`;
+      </button></div></div>`;
   if (!ACCTS.length) {
     home.innerHTML = brand + (loadState === "loading"
       ? `<div class="accts">${'<div class="acct skel"><div class="ring"></div><div class="meta"><b></b><span></span></div></div>'.repeat(2)}</div>`
