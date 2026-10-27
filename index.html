@@ -142,14 +142,17 @@ const ICON_ON = '<svg viewBox="0 0 24 24" fill="#fff"><path d="M4 9v6h4l5 4V5L8 
 const ICON_OFF = '<svg viewBox="0 0 24 24" fill="#fff"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 9.5l5 5m0-5l-5 5" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>';
 
 /* ---------- data: stories.json, refreshed every ~10 min by the GitHub Actions job ----------
-   {accounts:[{u,t,p,snaps:[{v,ts,id,m,ad?}]}], fetchedAt}, snaps newest first; ad=1 marks a labelled ad */
+   {accounts:[{u,t,p,snaps:[{v,ts,id,m,ad?}]}], fetchedAt}, snaps oldest first (like Snapchat); ad=1 marks an ad or promo */
 const API = "stories.json";
 let RAW = [], ACCTS = [], loadState = "loading", loadedAt = 0;
 let hideAds = true;
 try { hideAds = localStorage.getItem("hideAds") !== "0"; } catch {}
-// ACCTS is what the player walks through: RAW minus ads when hiding them
+const MAX_AGE_MS = 2 * 24 * 3600 * 1000; // older snaps are dropped, even if stories.json is stale
+// ACCTS is what the player walks through: RAW minus old snaps, and minus ads when hiding them
 function applyFilter() {
-  ACCTS = RAW.map(a => hideAds ? { ...a, snaps: a.snaps.filter(s => !s.ad) } : a).filter(a => a.snaps.length);
+  const cutoff = (Date.now() - MAX_AGE_MS) / 1000;
+  ACCTS = RAW.map(a => ({ ...a, snaps: a.snaps.filter(s => (!s.ts || s.ts > cutoff) && !(hideAds && s.ad)) }))
+    .filter(a => a.snaps.length);
 }
 function setHideAds(on) {
   hideAds = on;
@@ -223,7 +226,7 @@ function renderHome() {
       const n = unseen(a);
       return `<button class="acct" data-i="${i}">
         <div class="ring ${n ? "" : "seen"}"><img src="${esc(a.p)}" alt="" onerror="this.style.visibility='hidden'"><span class="n">${nf.format(n)}</span></div>
-        <div class="meta"><b>${esc(a.t)}</b><span>${nf.format(a.snaps.length)} قصص · آخرها ${ago(a.snaps[0].ts)}</span></div>
+        <div class="meta"><b>${esc(a.t)}</b><span>${nf.format(a.snaps.length)} قصص · آخرها ${ago(a.snaps.at(-1).ts)}</span></div>
       </button>`;
     }).join("")}</div>
     <button class="play" id="playAll"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>شغّل الكل</button>`;

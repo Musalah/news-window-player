@@ -6,6 +6,7 @@ const UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
 const ALLOWED_ORIGINS = ["https://musalah.github.io"];
 const CACHE_SECONDS = 60;
+const MAX_AGE_MS = 2 * 24 * 3600 * 1000; // drop snaps older than two days
 
 async function fetchAccount(username) {
   const res = await fetch(`https://www.snapchat.com/@${username}`, {
@@ -26,8 +27,7 @@ async function fetchAccount(username) {
       m: s.snapUrls?.mediaUrl,
       ...(s.isSponsored ? { ad: 1 } : {}), // always null so far; OCR in detect-ads.py does the real work
     }))
-    .filter(s => s.m)
-    .reverse(); // snapList is oldest-first; the player wants newest first
+    .filter(s => s.m && (!s.ts || s.ts * 1000 > Date.now() - MAX_AGE_MS)); // oldest first, like Snapchat
   return {
     u: profile.username ?? username,
     t: profile.title ?? username,
