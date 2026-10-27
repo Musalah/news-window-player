@@ -139,6 +139,8 @@ def main():
         for s, r in zip(todo, ex.map(scan, todo)):
             if r is not None:
                 cache[s["id"]] = r
+                if r:
+                    print("ad:", s["id"], flush=True)
     for s in snaps:
         if s.get("ad") or cache.get(s["id"]):
             s["ad"] = 1
