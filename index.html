@@ -6,6 +6,11 @@
 <meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="نافذة الأخبار">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
 <title>نافذة الأخبار</title>
 <style>
 :root{
@@ -26,7 +31,14 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 body.viewing #home{transform:scale(.92);opacity:0;filter:blur(6px);pointer-events:none}
 .brand{display:flex;align-items:baseline;justify-content:space-between}
 .brand h1{font-size:30px;font-weight:800;letter-spacing:-.5px}
-.brand time{color:var(--dim);font-size:14px}
+.refresh{display:flex;align-items:center;gap:6px;color:var(--dim);font-size:14px;padding:6px 0}
+.refresh svg{width:16px;height:16px}
+.refresh.spinning svg{animation:sp .8s linear infinite}
+.skel .ring{background:var(--line)}
+.skel b,.skel span{height:14px;border-radius:7px;background:var(--line);width:60%}
+.skel span{width:40%;margin-top:8px}
+.skel{animation:pulse 1.2s ease-in-out infinite alternate}
+@keyframes pulse{to{opacity:.5}}
 .accts{display:flex;flex-direction:column;gap:12px}
 .acct{display:flex;align-items:center;gap:14px;padding:14px;border-radius:22px;background:var(--card);
   border:1px solid var(--line);text-align:start;transition:transform .15s;animation:rise .5s both}
@@ -121,32 +133,22 @@ const IMG_MS = 5500;
 const ICON_ON = '<svg viewBox="0 0 24 24" fill="#fff"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 8.5a5 5 0 010 7M18.5 6a8.5 8.5 0 010 12" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>';
 const ICON_OFF = '<svg viewBox="0 0 24 24" fill="#fff"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 9.5l5 5m0-5l-5 5" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>';
 
-/* ---------- data: the shortcut passes lines in the URL hash ----------
-   @username|title|avatarUrl   account header
-   type|timestampSec|mediaUrl  snap (type 1 = video), newest first;
-                               mediaUrl may omit the CDN prefix to keep the URL short */
-const CDN = "https://cf-st.sc-cdn.net/";
-function parse(raw) {
-  const accts = [];
-  for (const line of raw.split(/\r?\n/)) {
-    if (!line.trim()) continue;
-    if (line[0] === "@") {
-      const [u, t, p] = line.slice(1).split("|");
-      accts.push({ u: u.trim(), t: (t || u).trim(), p: (p || "").trim(), snaps: [] });
-    } else if (accts.length) {
-      const [v, ts, ...rest] = line.split("|");
-      let m = rest.join("|").trim();
-      if (!m) continue;
-      if (!/^https?:/.test(m)) m = CDN + m.replace(/^\//, "");
-      const id = (m.match(/\/[a-z]\/([^./?]+)/) || [, m])[1];
-      accts[accts.length - 1].snaps.push({ v: v.trim() === "1", ts: +ts || 0, id, m });
-    }
+/* ---------- data: the Worker returns {accounts:[{u,t,p,snaps:[{v,ts,id,m}]}]}, snaps newest first ---------- */
+const API = "WORKER_URL";
+let ACCTS = [], loadState = "loading", loadedAt = 0;
+
+async function loadStories() {
+  loadState = "loading"; renderHome();
+  try {
+    const res = await fetch(API, { cache: "no-store" });
+    const data = await res.json();
+    ACCTS = (data.accounts || []).filter(a => a.snaps && a.snaps.length);
+    loadState = "ok"; loadedAt = Date.now();
+  } catch {
+    loadState = ACCTS.length ? "ok" : "error";
   }
-  return accts.filter(a => a.u && a.snaps.length);
+  renderHome();
 }
-let raw = "";
-try { raw = decodeURIComponent(location.hash.slice(1)); } catch { raw = location.hash.slice(1); }
-const ACCTS = parse(raw);
 
 /* ---------- seen state (per viewer, best effort) ---------- */
 let seen = new Set();
@@ -174,13 +176,22 @@ const nf = new Intl.NumberFormat("ar");
 function renderHome() {
   const home = $("#home");
   const today = new Date().toLocaleDateString("ar", { weekday: "long", day: "numeric", month: "long" });
+  const brand = `<div class="brand"><h1>نافذة الأخبار</h1>
+    <button class="refresh ${loadState === "loading" ? "spinning" : ""}" id="refresh" aria-label="تحديث">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v4h-4"/></svg>
+      <time>${today}</time></button></div>`;
   if (!ACCTS.length) {
-    home.innerHTML = `<div class="brand"><h1>نافذة الأخبار</h1><time>${today}</time></div>
-      <div class="empty"><b>لا توجد قصص الآن</b>افتح الصفحة من اختصار «نافذة الأخبار»<br>عشان يجيب آخر القصص.</div>`;
+    home.innerHTML = brand + (loadState === "loading"
+      ? `<div class="accts">${'<div class="acct skel"><div class="ring"></div><div class="meta"><b></b><span></span></div></div>'.repeat(2)}</div>`
+      : `<div class="empty"><b>${loadState === "error" ? "تعذّر جلب القصص" : "لا توجد قصص الآن"}</b>
+         ${loadState === "error" ? "تأكد من الاتصال وحاول مرة ثانية." : "ارجع بعدين."}<br><br>
+         <button class="play" id="retry" style="width:180px;margin:auto">حاول مرة ثانية</button></div>`);
+    $("#refresh").onclick = loadStories;
+    const r = $("#retry"); if (r) r.onclick = loadStories;
     return;
   }
   const unseen = a => a.snaps.filter(s => !seen.has(s.id)).length;
-  home.innerHTML = `<div class="brand"><h1>نافذة الأخبار</h1><time>${today}</time></div>
+  home.innerHTML = brand + `
     <div class="accts">${ACCTS.map((a, i) => {
       const n = unseen(a);
       return `<button class="acct" data-i="${i}">
@@ -189,6 +200,7 @@ function renderHome() {
       </button>`;
     }).join("")}</div>
     <button class="play" id="playAll"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>شغّل الكل</button>`;
+  $("#refresh").onclick = loadStories;
   home.querySelectorAll(".acct").forEach(b => b.onclick = () => open(+b.dataset.i));
   $("#playAll").onclick = () => {
     const i = ACCTS.findIndex(a => unseen(a));
@@ -415,16 +427,19 @@ viewer.addEventListener("pointerup", endGesture);
 viewer.addEventListener("pointercancel", endGesture);
 viewer.addEventListener("contextmenu", e => e.preventDefault());
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) { paused = true; front.querySelector("video").pause(); }
-  else { paused = false; if (document.body.classList.contains("viewing")) playFront(); }
+  if (document.hidden) { paused = true; front.querySelector("video").pause(); return; }
+  paused = false;
+  if (document.body.classList.contains("viewing")) playFront();
+  else if (Date.now() - loadedAt > 2 * 60 * 1000) loadStories(); // back from the home screen: refresh
 });
 addEventListener("keydown", e => {
   if (!document.body.classList.contains("viewing")) return;
   if (e.key === "ArrowRight") next(); else if (e.key === "ArrowLeft") prev(); else if (e.key === "Escape") close();
 });
 
-renderHome();
+loadStories();
 requestAnimationFrame(loop);
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 </script>
 </body>
 </html>
