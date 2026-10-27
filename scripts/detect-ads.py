@@ -50,8 +50,9 @@ def red_band(im):
     return best if best[1] - best[0] >= h * 0.03 else None
 
 
-def white_boxes(im, scale=4):
-    """Small solid near-white boxes (like a white "Ad" badge), as full-size crop boxes."""
+def white_boxes(im):
+    """Small solid near-white boxes with dark letters inside (like a white "Ad" badge), as full-size crop boxes."""
+    scale = max(1, im.width // 310)
     g = im.convert("L").resize((im.width // scale, im.height // scale))
     w, h = g.size
     px = g.load()
@@ -74,7 +75,13 @@ def white_boxes(im, scale=4):
                         seen[ny * w + nx] = 1
                         stack.append((nx, ny))
             bw, bh = x2 - x1 + 1, y2 - y1 + 1
-            if w * 0.04 <= bw <= w * 0.2 and 0.5 <= bw / bh <= 2.5 and n > bw * bh * 0.5:
+            if not (w * 0.04 <= bw <= w * 0.2 and 0.5 <= bw / bh <= 2.5 and n > bw * bh * 0.5):
+                continue
+            # a badge has a clean white edge and dark letters inside; without this check tesseract
+            # sometimes "reads" Ad off a plain bright patch
+            edge = [(x, y) for y in range(y1, y2 + 1) for x in range(x1, x2 + 1) if x in (x1, x2) or y in (y1, y2)]
+            ink = sum(1 for y in range(y1 + 1, y2) for x in range(x1 + 1, x2) if px[x, y] < 100)
+            if sum(px[p] >= 235 for p in edge) >= len(edge) * 0.8 and ink >= (bw - 2) * (bh - 2) * 0.05:
                 out.append((x1 * scale, y1 * scale, (x2 + 1) * scale, (y2 + 1) * scale))
     return out
 
