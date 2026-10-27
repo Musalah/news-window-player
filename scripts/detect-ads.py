@@ -29,8 +29,9 @@ def ocr(img, tmp, lang, psm="11"):
     return run(["tesseract", p, "-", "-l", lang, "--psm", psm])
 
 
-def has_label(text):
-    return any(LABEL.match(line.strip()) for line in text.splitlines())
+def label(text):
+    """The first line that is just the ad label, or None."""
+    return next((line.strip() for line in text.splitlines() if LABEL.match(line.strip())), None)
 
 
 def red_band(im):
@@ -86,24 +87,27 @@ def white_boxes(im):
     return out
 
 
-def frame_is_ad(path, tmp):
+def ad_label(path, tmp):
+    """Where the frame shows an ad label and what was read there (for the log), or None."""
     im = Image.open(path).convert("RGB")
     band = red_band(im)
     if band:  # white "Ad" on the red bar: upscale and threshold it to black on white
         crop = im.crop((0, band[0], im.width, band[1]))
         crop = crop.resize((crop.width * 2, crop.height * 2)).convert("L").point(lambda v: 0 if v > 200 else 255)
-        if has_label(ocr(crop, tmp, "eng")):
-            return True
+        if hit := label(ocr(crop, tmp, "eng")):
+            return f"red bar: {hit}"
     for box in white_boxes(im):  # "Ad" badge: tesseract only reads it cropped on its own
-        if LABEL.match(ocr(im.crop(box), tmp, "eng", psm="7").strip()):
-            return True
+        if hit := label(ocr(im.crop(box), tmp, "eng", psm="7")):
+            return f"badge {box}: {hit}"
     g = im.convert("L")
     for x in (im.width * 2 // 3, 0):  # faint grey "إعلان" in a top corner, beside the logo
         top = g.crop((x, 0, x + im.width // 3, im.height * 3 // 10))
         top = top.resize((top.width * 2, top.height * 2)).point(lambda v: 0 if v < 230 else 255)
-        if has_label(ocr(top, tmp, "ara")):
-            return True
-    return has_label(ocr(im, tmp, "eng+ara"))
+        if hit := label(ocr(top, tmp, "ara")):
+            return f"corner: {hit}"
+    if hit := label(ocr(im, tmp, "eng+ara")):
+        return f"full frame: {hit}"
+    return None
 
 
 def frames(snap, tmp):
@@ -122,18 +126,21 @@ def frames(snap, tmp):
 
 
 def scan(snap):
-    """1 = ad, 0 = not an ad, None = couldn't fetch or out of time (retry next run)."""
+    """(1, where) = ad, (0, None) = not an ad, (None, None) = couldn't fetch or out of time (retry next run)."""
     if time.time() > DEADLINE:
-        return None
+        return None, None
     with tempfile.TemporaryDirectory() as tmp:
         try:
             paths = frames(snap, tmp)
             if not paths:
-                return None
-            return int(any(frame_is_ad(p, tmp) for p in paths))
+                return None, None
+            for i, p in enumerate(paths):
+                if hit := ad_label(p, tmp):
+                    return 1, f"frame {i}, {hit}"
+            return 0, None
         except Exception as e:
             print("warn:", snap["id"], e, file=sys.stderr)
-            return None
+            return None, None
 
 
 def main():
@@ -143,11 +150,11 @@ def main():
     snaps = [s for a in data["accounts"] for s in a["snaps"]]
     todo = [s for s in snaps if s["id"] not in cache and not s.get("ad")]
     with ThreadPoolExecutor(os.cpu_count() or 4) as ex:
-        for s, r in zip(todo, ex.map(scan, todo)):
+        for s, (r, why) in zip(todo, ex.map(scan, todo)):
             if r is not None:
                 cache[s["id"]] = r
                 if r:
-                    print("ad:", s["id"], flush=True)
+                    print("ad:", s["id"], why, flush=True)
     for s in snaps:
         if s.get("ad") or cache.get(s["id"]):
             s["ad"] = 1
