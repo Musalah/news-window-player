@@ -21,11 +21,23 @@ jobs:
         with:
           node-version: 22
       - run: node scripts/fetch-stories.mjs
+      # Ad detection is best-effort: if it fails, stories still update, just without ad flags.
+      - name: Install OCR tools
+        id: ocr
+        continue-on-error: true
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends tesseract-ocr tesseract-ocr-ara ffmpeg >/dev/null
+          pip install -q pillow
+      - name: Flag ads
+        if: steps.ocr.outcome == 'success'
+        continue-on-error: true
+        run: python3 scripts/detect-ads.py
       - name: Commit if changed
         run: |
-          git diff --quiet -- stories.json && git ls-files --error-unmatch stories.json >/dev/null 2>&1 && exit 0
+          [ -z "$(git status --porcelain -- stories.json ads-cache.json)" ] && exit 0
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add stories.json
+          git add stories.json ads-cache.json
           git commit -m "Update stories"
           git push
