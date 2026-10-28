@@ -29,6 +29,7 @@ DOMAIN = re.compile(r"[a-z0-9-]{3,}(?:\.[a-z0-9-]+)*\.(?:sa|com|net|org|online|s
 NOT_PROMO = re.compile(r"gov|trendnews|saudipanther|snapchat", re.I)  # a link to these is just a source
 ARABIC = re.compile(r"[؀-ۿ]")
 BRAND_LINES = ["ترند الأخبار", "سعودي بانثر", "SAUDI PANTHER", "SAUDI.PANTHER", "TRENDNEWS24"]
+BRAND_WORDS = {"SAUDI", "PANTHER"}  # saudi.panther's logo, read as separate lines
 
 
 def domains(text):
@@ -50,7 +51,13 @@ def is_noise(line, frame_h):
     if len(t) < 2 or LABEL.match(t):
         return True
     squashed = re.sub(r"\s", "", t).upper()
+    if squashed in BRAND_WORDS:
+        return True
     if any(difflib.SequenceMatcher(None, squashed, re.sub(r"\s", "", b).upper()).ratio() >= 0.7 for b in BRAND_LINES):
+        return True
+    # trendnews24's tiny tiled "ترند الأخبار", misread: "لو ند الل", "بريد الأحر", "ترتد اللة"
+    if ARABIC.search(t) and len(squashed) <= 12 and (
+            {"الل", "اللة"} & set(t.split()) or difflib.SequenceMatcher(None, squashed, "ترندالأخبار").ratio() >= 0.45):
         return True
     # all-caps Latin crumbs are the tiled watermark read badly ("TRENONENS 24", "IFNONBUS24")
     return not ARABIC.search(t) and not re.search(r"[a-z]", t) and not DOMAIN.search(t) and len(t.split()) <= 3
