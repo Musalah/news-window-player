@@ -1,5 +1,5 @@
 // App-shell cache so the home-screen app opens instantly; stories and media always come from the network.
-const CACHE = "news-window-v5";
+const CACHE = "news-window-v6";
 const SHELL = ["./", "index.html", "manifest.webmanifest", "icons/icon-192.png", "icons/apple-touch-icon.png"];
 
 self.addEventListener("install", e => {
