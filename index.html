@@ -70,7 +70,7 @@ body.viewing #home{transform:scale(.92);opacity:0;filter:blur(6px);pointer-event
 .empty b{display:block;color:var(--text);font-size:20px;margin-bottom:6px}
 
 /* ---------- viewer ---------- */
-#viewer{position:fixed;inset:0;background:#000;perspective:1100px;visibility:hidden;opacity:0;
+#viewer{position:fixed;inset:0;background:#000;perspective:1100px;visibility:hidden;opacity:0;touch-action:none;
   transition:opacity .3s,visibility 0s .3s}
 body.viewing #viewer{visibility:visible;opacity:1;transition:opacity .3s}
 #cube{position:absolute;inset:0;transform-style:preserve-3d;will-change:transform}
@@ -146,6 +146,7 @@ body.hold #ui{opacity:0}
       <div class="head">
         <img id="hAv" alt="">
         <div class="who"><b id="hName"></b><span id="hTime"></span> · <span id="hPos"></span></div>
+        <button class="icon" id="textBtn" aria-label="النص في السنابة"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></button>
         <button class="icon" id="mute" aria-label="الصوت"></button>
         <button class="icon" id="close" aria-label="إغلاق"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
@@ -430,6 +431,7 @@ function open(a) {
   last = 0;
 }
 function close() {
+  if (reloadOnClose) return location.reload();
   closeText();
   faces.forEach(f => f.querySelector("video").pause());
   document.body.classList.remove("viewing", "hold");
@@ -493,6 +495,7 @@ $("#copy").onclick = async () => {
   toast("انتسخ النص ✓");
 };
 sheet.querySelector(".dim").onclick = closeText;
+$("#textBtn").onclick = e => { e.stopPropagation(); openText(); };
 { // drag the sheet down to close it
   let y0 = null;
   const card = sheet.querySelector(".card");
@@ -510,11 +513,12 @@ const viewer = $("#viewer"), cube = $("#cube");
 let g = null, holdT = 0;
 viewer.addEventListener("pointerdown", e => {
   if (e.target.closest("button")) return;
-  g = { x: e.clientX, y: e.clientY, t: performance.now(), drag: false };
+  g = { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, t: performance.now(), drag: false };
   holdT = setTimeout(() => { paused = true; document.body.classList.add("hold"); front.querySelector("video").pause(); }, 200);
 });
 viewer.addEventListener("pointermove", e => {
   if (!g) return;
+  g.lx = e.clientX; g.ly = e.clientY;
   const dx = e.clientX - g.x, dy = e.clientY - g.y;
   if (!g.drag && Math.hypot(dx, dy) > 10) { g.drag = true; clearTimeout(holdT); }
   if (g.drag && dy > 0 && Math.abs(dy) > Math.abs(dx)) {
@@ -527,7 +531,9 @@ viewer.addEventListener("pointermove", e => {
 const endGesture = e => {
   if (!g) return;
   clearTimeout(holdT);
-  const dx = e.clientX - g.x, dy = e.clientY - g.y, held = performance.now() - g.t > 200;
+  // pointercancel can report 0,0: go by the last move instead
+  const ex = e.type === "pointercancel" ? g.lx : e.clientX, ey = e.type === "pointercancel" ? g.ly : e.clientY;
+  const dx = ex - g.x, dy = ey - g.y, held = performance.now() - g.t > 200;
   const wasPaused = paused;
   paused = false; document.body.classList.remove("hold");
   const resetDrag = () => { cube.style.transition = "transform .25s"; cube.style.transform = ""; viewer.style.background = "";
@@ -535,7 +541,7 @@ const endGesture = e => {
   if (g.drag && dy > 110 && dy > Math.abs(dx)) { resetDrag(); close(); }
   else if (g.drag && dy < -70 && -dy > Math.abs(dx)) { resetDrag(); openText(); }
   else if (g.drag && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) { resetDrag(); jumpAccount(dx < 0 ? 1 : -1); }
-  else if (!g.drag && !held) { e.clientX < innerWidth * 0.3 ? prev() : next(); }
+  else if (!g.drag && !held && e.type !== "pointercancel") { ex < innerWidth * 0.3 ? prev() : next(); }
   else { resetDrag(); if (wasPaused) playFront(); }
   g = null;
 };
@@ -546,7 +552,8 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) { paused = true; front.querySelector("video").pause(); return; }
   paused = sheet.classList.contains("on"); // reading the text: stay paused
   if (document.body.classList.contains("viewing") && !paused) playFront();
-  else if (Date.now() - loadedAt > 2 * 60 * 1000) loadStories(); // back from the home screen: refresh
+  else if (!document.body.classList.contains("viewing") && Date.now() - loadedAt > 2 * 60 * 1000) loadStories(); // back from the home screen: refresh
+  if (swReg) swReg.update().catch(() => {}); // pick up a new version without a full relaunch
 });
 addEventListener("keydown", e => {
   if (!document.body.classList.contains("viewing")) return;
@@ -557,7 +564,16 @@ addEventListener("keydown", e => {
 
 loadStories();
 requestAnimationFrame(loop);
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+let swReg = null, reloadOnClose = false;
+if ("serviceWorker" in navigator) {
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register("sw.js").then(r => { swReg = r; }).catch(() => {});
+  // a new version took over: reload now, or once the viewer closes
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController) return; // first install, the page is already current
+    if (document.body.classList.contains("viewing")) reloadOnClose = true; else location.reload();
+  });
+}
 </script>
 </body>
 </html>
