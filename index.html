@@ -168,7 +168,6 @@ body.hold #ui{opacity:0}
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
-const IMG_MS = 5500;
 const ICON_ON = '<svg viewBox="0 0 24 24" fill="#fff"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 8.5a5 5 0 010 7M18.5 6a8.5 8.5 0 010 12" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>';
 const ICON_OFF = '<svg viewBox="0 0 24 24" fill="#fff"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 9.5l5 5m0-5l-5 5" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>';
 
@@ -289,7 +288,7 @@ function load(face, a, s) {
   const done = ok => { if (face.key !== snap.id) return; face.ready = ok; face.failed = !ok; face.classList.remove("loading"); };
   if (snap.v) {
     img.removeAttribute("src"); bg.style.backgroundImage = "none";
-    vid.muted = muted; vid.src = snap.m; vid.load();
+    vid.muted = muted; vid.loop = true; vid.src = snap.m; vid.load(); // replays until tapped
     vid.oncanplay = () => done(true); vid.onerror = () => done(false);
   } else {
     vid.pause(); vid.removeAttribute("src"); vid.load();
@@ -313,7 +312,7 @@ function buildBars() {
 }
 function paintBars(p) {
   const bars = $("#bars").children, n = ACCTS[ai].snaps.length;
-  if (n > MAX_SEGMENTS) { bars[0].firstChild.style.transform = `scaleX(${(si + Math.min(1, p)) / n})`; return; }
+  if (n > MAX_SEGMENTS) { bars[0].firstChild.style.transform = `scaleX(${(si + 1) / n})`; return; }
   for (let i = 0; i < bars.length; i++) {
     bars[i].classList.toggle("done", i < si);
     bars[i].firstChild.style.transform = i === si ? `scaleX(${Math.min(1, p)})` : "";
@@ -402,19 +401,11 @@ function loop(now) {
   raf = requestAnimationFrame(loop);
   const dt = last ? now - last : 0; last = now;
   if (!document.body.classList.contains("viewing")) return;
-  if (front.failed) { elapsed += dt; if (elapsed > 900) next(); return; }
+  if (front.failed) { elapsed += dt; if (elapsed > 900) next(); return; } // nothing to show: skip a snap that won't load
   if (paused || busy || !front.ready) return;
-  const snap = ACCTS[ai].snaps[si];
-  let p;
-  if (snap.v) {
-    const v = front.querySelector("video");
-    p = v.duration ? v.currentTime / v.duration : 0;
-    if (v.ended) return next();
-  } else {
-    elapsed += dt; p = elapsed / IMG_MS;
-    if (p >= 1) return next();
-  }
-  paintBars(p);
+  // snaps never advance on their own: only a tap moves on. The bar just shows video playback.
+  const v = front.querySelector("video");
+  paintBars(!ACCTS[ai].snaps[si].v ? 1 : v.duration ? v.currentTime / v.duration : 0);
 }
 
 function open(a) {
